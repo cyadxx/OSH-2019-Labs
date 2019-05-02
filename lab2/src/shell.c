@@ -126,16 +126,38 @@ void RedirectionExe(char *args1[], char *args2[], int type){
 		pid_t pid = fork();
 		if(pid == 0){
 			/*子进程*/
-			int fd = open(args2[0], O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+			int fd = open(args2[0], O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 			dup2(fd, 1);
 			execvp(args1[0], args1);
 			/*execvp失败*/
-			printf("Redirection execvp error!\n");
+			printf("Redirection1 execvp error!\n");
+		} else{
+			wait(NULL);
 		}
-		wait(NULL);
 	} else if(type == 2){
-
+		pid_t pid = fork();
+		if(pid == 0){
+			/*子进程*/
+			int fd = open(args2[0], O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+			dup2(fd, 1);
+			execvp(args1[0], args1);
+			/*execvp失败*/
+			printf("Redirection2 execvp error!\n");
+		} else{
+			wait(NULL);
+		}
 	} else if(type == 3){
+		pid_t pid = fork();
+		if(pid == 0){
+			/*子进程*/
+			int fd = open(args2[0], O_RDONLY);
+			dup2(fd, 0);
+			execvp(args1[0], args1);
+			/*execvp失败*/
+			printf("Redirection3 execvp error!\n");
+		} else{
+			wait(NULL);
+		}
 
 	} else {
 		printf("Redirection type error!\n");
