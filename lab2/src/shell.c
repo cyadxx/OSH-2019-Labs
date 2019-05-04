@@ -70,8 +70,7 @@ void PipeExe(char *args[]){
         }
         dup2(fd[i][1],STDOUT_FILENO);
         execvp(new_args[i][0],new_args[i]); 
-    }
-    else if(i>0&&i<pipe_num){
+    } else if(i>0&&i<pipe_num) {
         for(j=0;j<pipe_num;j++){
             if(j!=i-1)
                 close(fd[j][0]);
@@ -81,8 +80,7 @@ void PipeExe(char *args[]){
         dup2(fd[i-1][0],STDIN_FILENO);
         dup2(fd[i][1],STDOUT_FILENO);
         execvp(new_args[i][0],new_args[i]);
-    }
-    else if(i==pipe_num){
+    } else if(i==pipe_num) {
         for(j=0;j<pipe_num;j++){
             close(fd[j][1]);
             if(j!=i-1)
@@ -90,8 +88,7 @@ void PipeExe(char *args[]){
         }
         dup2(fd[i-1][0],STDIN_FILENO);
         execvp(new_args[i][0],new_args[i]);
-    }
-    else{
+    } else {
 		for(j=0;j<pipe_num;j++){
             close(fd[j][0]);
             close(fd[j][1]);
