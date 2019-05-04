@@ -7,7 +7,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <readline/readline.h>
-#include <readline/history.h>
 
 /******************************************pipe********************************************/
 
@@ -19,68 +18,87 @@ int IsPipe(char *args[]){
 	return 0;
 }
 
-void PipeSeparate(char *args[], char *args1[], char *args2[]){
-	/*将管道命令拆开*/
-	int i;
-	for(i = 0; strcmp(args[i], "|") != 0; i++){
-		args1[i] = args[i];
-	}
-	i++;
-	args1[i] = NULL;
-	int j = 0;
-	for(; args[i] != NULL; i++, j++){
-		args2[j] = args[i];
-	}
-	args2[++j] = NULL;
-}
-
-void PipeExe(char *args1[], char *args2[]){
-	/*执行管道命令*/
-	pid_t cpid = fork();
-	if(cpid == -1){
-		printf("fork error!\n");
-		return;
-	}else if(cpid > 0){
-		//父进程
-		wait(NULL);
-	}else if(cpid == 0){
-		//子进程
-		int fd[2];
-		if(pipe(fd) == -1){
-			printf("pipe create error!\n");
-			return;
-		}
-		pid_t ccpid = fork();	//创建子进程的子进程
-		if(ccpid == -1){
-			printf("fork error!\n");
-			return;
-		}else if(ccpid == 0){
-			//子进程
-			//close(fd[0]);		//子进程关闭读端
-			dup2(fd[1], 1);		//管道写端与标准输出关联
-			execvp(args1[0], args1);	
-			/*execvp失败*/
-			printf("execvp error!\n");
-		}else{
-			//父进程
-			wait(NULL);
-			close(fd[1]);
-			dup2(fd[0], 0);		//管道读端与标准输入关联
-			if(IsPipe(args2) == 0){
-				/*不是管道*/
-				execvp(args2[0], args2);
-				/*execvp失败*/
-				printf("execvp error!\n");
+void PipeExe(char *args[]){
+	/* 
+	 * 执行管道命令
+	 */
+	int i, j;
+	int pipe_num = 0;
+	for (i = 0; args[i]; i++)
+    	if (*args[i] == '|')
+        	pipe_num++;
+	char *new_args[128][128];
+    int a = 0;
+    pid_t pid;
+	
+	for(i = 0; args[a] != NULL; i++){
+		for(j = 0; args[a] != NULL; j++){
+			if(strcmp(args[a], "|") != 0){
+				new_args[i][j] = args[a];
+				a++;
+			} else {
+				new_args[i][j] = NULL;
+				a++;
+				break;
 			}
-			//}else{
-				/*是管道*/
-			//	char *args3[128];
-			//	char *args4[128];
-			//	PipeSeparate(args2, args3, args4);
-			//	PipeExe(args3, args4);
-			//}
 		}
+		if(args[a] == NULL)
+			new_args[i][j] = NULL;
 	}
+	new_args[i][0] = NULL;
+	
+    int fd[128][2];
+    for(i=0;i<pipe_num;i++)
+        if((pipe(fd[i]))==-1){
+            printf("pipe error!\n");
+            exit(-1);
+        }
+    for(i=0;i<pipe_num+1;i++){
+        if((pid=fork())==0)
+            break;
+        else if(pid==-1){
+            printf("fork error!\n");
+            exit(-1);
+        }
+    }
+
+    if(i==0){
+        for(j=0;j<pipe_num;j++){
+            close(fd[j][0]);
+            if(j!=i)
+                close(fd[j][1]);
+        }
+        dup2(fd[i][1],STDOUT_FILENO);
+        execvp(new_args[i][0],new_args[i]); 
+    }
+    else if(i>0&&i<pipe_num){
+        for(j=0;j<pipe_num;j++){
+            if(j!=i-1)
+                close(fd[j][0]);
+            if(j!=i)
+                close(fd[j][1]);
+        }
+        dup2(fd[i-1][0],STDIN_FILENO);
+        dup2(fd[i][1],STDOUT_FILENO);
+        execvp(new_args[i][0],new_args[i]);
+    }
+    else if(i==pipe_num){
+        for(j=0;j<pipe_num;j++){
+            close(fd[j][1]);
+            if(j!=i-1)
+                close(fd[j][0]);
+        }
+        dup2(fd[i-1][0],STDIN_FILENO);
+        execvp(new_args[i][0],new_args[i]);
+    }
+    else{
+		for(j=0;j<pipe_num;j++){
+            close(fd[j][0]);
+            close(fd[j][1]);
+		}
+        for(j=0;j<pipe_num+1;j++)
+            wait(NULL);
+    }
 }
 
 /*****************************************redirection*******************************************/
@@ -89,7 +107,7 @@ int IsRedirection(char *args[]){
 	/*判断是否为重定向命令*/
 	/* type = 1, ">"  *
 	 * type = 2, ">>" *
-	 * type = 3, "<"  */
+	 * type = 3, "<"ls | grep she  */
 	for(int i = 0; args[i] != NULL;i++){
 		if(strcmp(args[i], ">") == 0){
 			return 1;
@@ -108,13 +126,13 @@ void RedirectionSeparate(char *args[], char *args1[], char *args2[]){
 	for(i = 0; ((strcmp(args[i], ">") != 0) && (strcmp(args[i], ">>") != 0) && (strcmp(args[i], "<") != 0)); i++){
 		args1[i] = args[i];
 	}
-	i++;
 	args1[i] = NULL;
+	i++;
 	int j = 0;
 	for(; args[i] != NULL; i++, j++){
 		args2[j] = args[i];
 	}
-	args2[++j] = NULL;
+	args2[j] = NULL;
 }
 
 void RedirectionExe(char *args1[], char *args2[], int type){
@@ -164,20 +182,20 @@ void RedirectionExe(char *args1[], char *args2[], int type){
 	}
 }
 
-/******************************************pipe********************************************/
+/******************************************main********************************************/
 
 int main() {
     /* 输入的命令行 */
-    //char cmd[256];
+    char cmd[256];
     /* 命令行拆解成的各部分，以空指针结尾 */
     char *args[128];					//拆解后的命令
     while (1) {
         /* 提示符 */
-        //printf("# ");
-        //fgets(cmd, 256, stdin);
+        printf("# ");
+        fgets(cmd, 256, stdin);
         fflush(stdin);
-    	char *cmd;						//整行的命令
-		cmd = readline("# ");
+    	//char *cmd;						//整行的命令
+		//cmd = readline("# ");
 		//add_history(cmd);
         /* 清理结尾的换行符 */
         int i;
@@ -201,13 +219,10 @@ int main() {
 
         /* 内建命令 */
 		/*pipe*/
-		/*注意，管道优先级最高*/
+		/*管道优先级最高*/
 		if(IsPipe(args) != 0){
 			/*是管道*/
-			char *args1[128];
-			char *args2[128];
-			PipeSeparate(args, args1, args2);
-			PipeExe(args1, args2);
+			PipeExe(args);
 			continue;
 		}
 
@@ -242,13 +257,20 @@ int main() {
         }
 
 		/*export*/
-		if(strcmp(args[0], "export") == 0){
-			if(putenv(args[1]) == -1){
-				printf("putenv error!\n");
+		if (strcmp(args[0], "export")==0){
+            char *value;
+            for (value = args[1]; (*value != '=') && (*value != '\0'); value++);
+            if (*value == '='){
+                *value = '\0';
+                value++;
+                if(setenv(args[1],value,1)==-1)
+                    printf("setenv error\n");
+			} else {
+                printf("format error!\n");
 			}
-			continue;
-		}
-
+            continue;
+        }
+		
 		/*exit*/
         if (strcmp(args[0], "exit") == 0)
             return 0;
@@ -263,6 +285,5 @@ int main() {
         }
         /* 父进程 */
         wait(NULL);
-    	free(cmd);
 	}
 }
