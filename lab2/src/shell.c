@@ -198,7 +198,7 @@ int main() {
 		//cmd = readline("# ");
 		//add_history(cmd);
         /* 清理结尾的换行符 */
-        int i;
+        int i, j;
         for (i = 0; cmd[i] != '\n'; i++)
             ;
         cmd[i] = '\0';
@@ -212,6 +212,21 @@ int main() {
                     break;
                 }
         args[i] = NULL;
+		/*删除空格*/
+		for(i = 0; args[i] != NULL; i++){
+			while(args[i][0] == ' '){
+				for(j = 0; args[i][j] != '\0'; j++){
+					args[i][j] = args[i][j+1];
+				}
+			}
+		}
+		for(i = 0; args[i] != NULL; i++)
+			//while((args[i][0] == '\0') && (args[i] != NULL)){
+			while((args[i] != NULL) && (args[i][0] == '\0')){
+				for(j = i; args[j] != NULL; j++){
+					args[j] = args[j+1];
+				}
+			}
 
         /* 没有输入命令 */
         if (!args[0])
