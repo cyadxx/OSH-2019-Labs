@@ -2,8 +2,12 @@
 
 /lab1/lab1-2/
 
+
 /lab2/*
-
 !lab2/README
-
 !lab2/src/shell.c
+
+
+/lab3/*
+!lab3/docs/lab3.md
+!lab3/files/server.c
