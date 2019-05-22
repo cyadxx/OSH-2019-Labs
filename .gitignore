@@ -8,6 +8,7 @@
 !lab2/src/shell.c
 
 
-/lab3/*
+/lab3/docs/*
+/lab3/files/*
 !lab3/docs/lab3.md
 !lab3/files/server.c
