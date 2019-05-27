@@ -48,12 +48,13 @@ void handle_clnt_read (int clnt_sock, int i) {
     char* req_buf = (char*) malloc(MAX_RECV_LEN * sizeof(char));
     // 将 clnt_sock 作为一个文件描述符，读取最多 MAX_RECV_LEN 个字符
     // 但一次读取并不保证已经将整个请求读取完整
+	
+
+
+
     ssize_t req_len = read(clnt_sock, req_buf, MAX_RECV_LEN);
 
     // 根据 HTTP 请求的内容，解析资源路径和 Host 头
-    //char* path = (char*) malloc(MAX_PATH_LEN * sizeof(char));
-    //ssize_t path_len;
-    //parse_request(req_buf, req_len, path, &path_len);
     parse_request(req_buf, req_len, i);
 	free(req_buf);
 }
@@ -62,6 +63,11 @@ void handle_clnt_write (int clnt_sock, int i) {
     // 构造要返回的数据
     // 这里没有去读取文件内容，而是以返回请求资源路径作为示例，并且永远返回 200
     // 注意，响应头部后需要有一个多余换行（\r\n\r\n），然后才是响应内容
+	// 一次不一定写的完
+		
+	
+
+	//根据打开文件是否存在决定状态
     char* response = (char*) malloc(MAX_SEND_LEN * sizeof(char)) ;
     sprintf(response, 
         "HTTP/1.0 %s\r\nContent-Length: %zd\r\n\r\n%s", 
