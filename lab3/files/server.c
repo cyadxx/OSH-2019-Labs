@@ -1,9 +1,12 @@
 #include <math.h>
 #include <stdio.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <sys/epoll.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 
@@ -13,9 +16,14 @@
 #define MAX_SEND_LEN 1048576
 #define MAX_PATH_LEN 1024
 #define MAX_HOST_LEN 1024
-#define MAX_CONN 20
+#define MAX_CONN SOMAXCONN
+#define MAXEVENTS 1024
 
 #define HTTP_STATUS_200 "200 OK"
+#define HTTP_STATUS_404 "404 Not Found"
+#define HTTP_STATUS_500 "500 Internal Server Error"
+
+char path[MAX_CONN][MAX_PATH_LEN];
 
 void parse_request(char* request, ssize_t req_len, char* path, ssize_t* path_len)
 {
@@ -75,7 +83,10 @@ int main(){
     //   SOCK_STREAM: 面向连接的数据传输方式
     //   IPPROTO_TCP: 使用 TCP 协议
     int serv_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    
+	if(serv_sock == -1){
+		perror("socker: ");
+		exit(EXIT_FAILURE);
+	}
     // 将套接字和指定的 IP、端口绑定
     //   用 0 填充 serv_addr （它是一个 sockaddr_in 结构体）
     struct sockaddr_in serv_addr;
@@ -87,25 +98,78 @@ int main(){
     serv_addr.sin_addr.s_addr = inet_addr(BIND_IP_ADDR);
     serv_addr.sin_port = htons(BIND_PORT);
     //   绑定
-    bind(serv_sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
-
+	if(bind(serv_sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) == -1){
+		perror("bind: ");
+		exit(EXIT_FAILURE);
+	}
     // 使得 serv_sock 套接字进入监听状态，开始等待客户端发起请求
-    listen(serv_sock, MAX_CONN);
-    
-    // 接收客户端请求，获得一个可以与客户端通信的新的生成的套接字 clnt_sock
-    struct sockaddr_in clnt_addr;
-    socklen_t clnt_addr_size = sizeof(clnt_addr);
-
-    while (1) // 一直循环
-    {
-        // 当没有客户端连接时， accept() 会阻塞程序执行，直到有客户端连接进来
-        int clnt_sock = accept(serv_sock, (struct sockaddr*)&clnt_addr, &clnt_addr_size);
-        // 处理客户端的请求
-        handle_clnt(clnt_sock);
-    }
-
+	if(listen(serv_sock, MAX_CONN) == -1){
+		perror("listen: ");
+		exit(EXIT_FAILURE);
+	}
+	//创建epoll
+	int efd;
+	if(efd = epoll_create1 (0) == -1){
+		perror("epoll_create1: ");
+		exit(EXIT_FAILURE);
+	}
+	struct epoll_event event;
+	struct epoll_event *events;
+	event.data.fd = serv_sock;
+	event.events = EPOLLIN;
+	if (epoll_ctl (efd, EPOLL_CTL_ADD, serv_sock, &event) == -1){
+		perror ("epoll_ctl: ");
+		exit (EXIT_FAILURE);
+	}
+	//创建event数组
+	events = calloc (MAXEVENTS, sizeof (event));
+	while (1) {
+		int ready_ev_num, i;
+		ready_ev_num = epoll_wait (efd, events, MAXEVENTS, -1);		//-1为阻塞
+		for (i = 0; i < ready_ev_num; i++) {
+			if (events[i].events & (EPOLLERR | EPOLLHUP)) {
+                // 监控到错误或者挂起
+                perror ("epoll error: ");
+                close (events[i].data.fd);
+                continue;
+            }
+			if (events[i].events & EPOLLIN) {
+				//recieve new connection
+				//or connected socket has data in
+				if (serv_sock == events[i].data.fd) {
+					//have new connection
+    				// 接收客户端请求，获得一个可以与客户端通信的新生成的套接字 clnt_sock
+				    struct sockaddr_in clnt_addr;
+				    socklen_t clnt_addr_size = sizeof(clnt_addr);
+        			int clnt_sock = accept(serv_sock, (struct sockaddr*)&clnt_addr, &clnt_addr_size);
+					//don't need to handle request this time, we just need to add it to epoll
+					//handle_clnt(clnt_sock);
+					//将新的socket加入epoll
+					event.data.fd = clnt_sock;
+					event.events = EPOLLIN;
+					if (epoll_ctl(efd, EPOLL_CTL_ADD, clnt_sock, &event) == -1) {
+						perror ("epoll_ctl: ");
+						exit(EXIT_FAILURE);
+					}
+				} else {
+					//have something to read
+					//handle request
+					handle_clnt(events[i].data.fd);
+					//修改socket为EPOLLOUT，因为要xie hui数据了
+					event.events = EPOLLOUT;
+					epoll_ctl (efd, EPOLL_CTL_MOD, events[i].data.fd, &event);
+				}
+			} else if((events[i].events & EPOLLOUT) && (events[i].data.fd != sfd)) {
+				//向socket中写数据
+				handle_clnt (events[i].data.fd);
+				//这里该函数与上面的不同，该函数中最后需要关闭fd
+			}
+		}
+	}
     // 实际上这里的代码不可到达，可以在 while 循环中收到 SIGINT 信号时主动 break
     // 关闭套接字
-    close(serv_sock);
+    close (serv_sock);
+    close (efd);
+	free (events);
     return 0;
 }
