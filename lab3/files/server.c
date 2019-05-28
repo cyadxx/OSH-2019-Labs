@@ -29,10 +29,12 @@ ssize_t path_len[MAX_CONN];
 
 void write_everything (int clnt_sock, char *response, int write_len) {
 	int write_count = 0;
-	while (write_count < write_len) {
+	//while (write_count < write_len) {
 		int count = write (clnt_sock, response, MAX_SEND_LEN);
 		write_count += count;
-	}
+		//debug
+		printf ("write_everything\n");
+	//}
 }
 
 int file_size (char *filename) {
@@ -133,7 +135,7 @@ void handle_clnt_write (int clnt_sock, int i) {
     		write(clnt_sock, response, response_len);
 			//读取并发送文件内容
 			int write_len = 0, read_len = 0;
-			while (read_len < content_len) {
+			//while (read_len < content_len) {
 				int read_count = read (fd, response, MAX_SEND_LEN);
 
 				//debug
@@ -144,7 +146,7 @@ void handle_clnt_write (int clnt_sock, int i) {
 
 				//debug
 				printf("here7\tread_len: %d\tcontent_len: %d\n", read_len, content_len);
-			}
+			//}
 		}
 	}
 
@@ -207,6 +209,10 @@ int main(){
 	//创建event数组
 	events = calloc (MAXEVENTS, sizeof (event));
 	while (1) {
+
+		//debug
+		printf("a new cycle\n");
+
 		int ready_ev_num, i;
 		ready_ev_num = epoll_wait (efd, events, MAXEVENTS, -1);		//-1为阻塞
 		for (i = 0; i < ready_ev_num; i++) {
@@ -245,7 +251,7 @@ int main(){
 				//向socket中写数据
 	
 				// debug
-				printf("here4\n");
+				printf("here4\tready_ev_num: %d\n", ready_ev_num);
 
 				handle_clnt_write (events[i].data.fd, i);
 				//这里该函数与上面的不同，该函数中最后需要关闭fd
