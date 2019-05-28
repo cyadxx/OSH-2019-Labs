@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include <arpa/inet.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
@@ -20,11 +21,26 @@
 #define MAXEVENTS 1024
 
 #define HTTP_STATUS_200 "200 OK"
-#define HTTP_STATUS_404 "404 Not Found"
+#define HTTP_STATUS_404 "404 File Not Found"
 #define HTTP_STATUS_500 "500 Internal Server Error"
 
 char path[MAX_CONN][MAX_PATH_LEN];
 ssize_t path_len[MAX_CONN];
+
+void write_everything (int clnt_sock, char *response, int write_len) {
+	int write_count = 0;
+	while (write_count < write_len) {
+		int count = write (clnt_sock, response, MAX_SEND_LEN);
+		write_count += count;
+	}
+}
+
+int file_size (char *filename) {
+	struct stat statbuf;
+	stat (filename, &statbuf);
+	int size = statbuf.st_size;
+	return size;
+}
 
 void parse_request (char* request, ssize_t req_len, int i) {
     char* req = request;
@@ -45,15 +61,35 @@ void handle_clnt_read (int clnt_sock, int i) {
     // 一个粗糙的读取方法，可能有 BUG！
     // 读取客户端发送来的数据，并解析
 	// 将解析得到的路径送入全局变量path
+	char end_of_req[] = "/r/n/r/n";
+
+	//debug
+	printf("here1\n");
+
     char* req_buf = (char*) malloc(MAX_RECV_LEN * sizeof(char));
+
+	//debug
+	printf("here2\n");
+
+	char* req_buf_ptr = req_buf;
+	ssize_t req_len = 0;
     // 将 clnt_sock 作为一个文件描述符，读取最多 MAX_RECV_LEN 个字符
     // 但一次读取并不保证已经将整个请求读取完整
-	
+	//debug
+	//while (strstr (req_buf, end_of_req) == NULL) {
+		//只要没有“/r/n/r/n”就继续读取
+		ssize_t n = read (clnt_sock, req_buf_ptr, MAX_RECV_LEN);
+		req_buf_ptr += n;
+		req_len += n;
 
+		//debug
+		printf("here3,	req_len: %zd\n", req_len);
+		printf("req_buf: %s\n", req_buf);
+		char *debug = strstr (req_buf, end_of_req);
+		printf ("strstr return value: %s\n", debug);
+	//}
 
-
-    ssize_t req_len = read(clnt_sock, req_buf, MAX_RECV_LEN);
-
+    //ssize_t req_len = read(clnt_sock, req_buf, MAX_RECV_LEN);
     // 根据 HTTP 请求的内容，解析资源路径和 Host 头
     parse_request(req_buf, req_len, i);
 	free(req_buf);
@@ -64,19 +100,53 @@ void handle_clnt_write (int clnt_sock, int i) {
     // 这里没有去读取文件内容，而是以返回请求资源路径作为示例，并且永远返回 200
     // 注意，响应头部后需要有一个多余换行（\r\n\r\n），然后才是响应内容
 	// 一次不一定写的完
-		
-	
-
-	//根据打开文件是否存在决定状态
     char* response = (char*) malloc(MAX_SEND_LEN * sizeof(char)) ;
-    sprintf(response, 
-        "HTTP/1.0 %s\r\nContent-Length: %zd\r\n\r\n%s", 
-        HTTP_STATUS_200, path_len[i], path[i]);
-    size_t response_len = strlen(response);
+	int len = strlen (path[i]);
+	if (path[i][len - 1] == '/') {
+		//请求的资源为目录
+    	sprintf(response, 
+        	"HTTP/1.0 %s\r\nContent-Length: %d\r\n\r\n", 
+        	HTTP_STATUS_500, 0);
+    	size_t response_len = strlen(response);
+    	write(clnt_sock, response, response_len);
+	} else {
+		//不是目录，则看是否存在该文件
+		char relative_path[MAX_PATH_LEN] = ".";
+		strcat (relative_path, path[i]);
+		int fd = open (relative_path, O_RDONLY);
+		if (fd == -1) {
+			//不存在
+    		sprintf(response, 
+        		"HTTP/1.0 %s\r\nContent-Length: %d\r\n\r\n", 
+        		HTTP_STATUS_404, 0);
+    		size_t response_len = strlen(response);
+    		write(clnt_sock, response, response_len);
+		} else {
+			//该文件存在
+			//先获取文件长度
+			//再读取并发送
+			int content_len = file_size (relative_path);
+    		sprintf(response, 
+        		"HTTP/1.0 %s\r\nContent-Length: %d\r\n\r\n", 
+        		HTTP_STATUS_200, content_len);
+    		size_t response_len = strlen(response);
+    		write(clnt_sock, response, response_len);
+			//读取并发送文件内容
+			int write_len = 0, read_len = 0;
+			while (read_len < content_len) {
+				int read_count = read (fd, response, MAX_SEND_LEN);
 
-    // 通过 clnt_sock 向客户端发送信息
-    // 将 clnt_sock 作为文件描述符写内容
-    write(clnt_sock, response, response_len);
+				//debug
+				printf("here6\tread_count: %d\n", read_count);
+
+				write_everything (clnt_sock, response, read_count);
+				read_len += read_count;
+
+				//debug
+				printf("here7\tread_len: %d\tcontent_len: %d\n", read_len, content_len);
+			}
+		}
+	}
 
     // 关闭客户端套接字
     close(clnt_sock);
@@ -173,8 +243,16 @@ int main(){
 				}
 			} else if ((events[i].events & EPOLLOUT) && (events[i].data.fd != serv_sock)) {
 				//向socket中写数据
+	
+				// debug
+				printf("here4\n");
+
 				handle_clnt_write (events[i].data.fd, i);
 				//这里该函数与上面的不同，该函数中最后需要关闭fd
+	
+				// debug
+				printf("here5\n");
+
 			}
 		}
 	}
