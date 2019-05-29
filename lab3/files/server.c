@@ -222,6 +222,7 @@ int main () {
                     }
 					
 					//可以不要
+					/*
                   	s = getnameinfo (&in_addr, in_len,
                                    		hbuf, sizeof (hbuf),
                                    		sbuf, sizeof (sbuf),
@@ -230,6 +231,7 @@ int main () {
                       	printf("Accepted connection on descriptor %d "
                              	"(host=%s, port=%s)\n", infd, hbuf, sbuf);
                     }
+					*/
 
 					//设置为非阻塞并加入监控列表
 					if((s = make_socket_non_blocking (infd)) == -1) {
@@ -275,8 +277,8 @@ int main () {
 				handle_clnt_write (events[i].data.fd, i);
 				
               	if (done) {
-                  	printf ("Closed connection on descriptor %d\n",
-                          	events[i].data.fd);
+                  	//printf ("Closed connection on descriptor %d\n",
+                    //      	events[i].data.fd);
                   	close (events[i].data.fd);
 				  	epoll_ctl (efd, EPOLL_CTL_DEL, events[i].data.fd, &event);
                 }
