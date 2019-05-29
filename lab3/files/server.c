@@ -187,7 +187,7 @@ int main () {
   	s = epoll_ctl (efd, EPOLL_CTL_ADD, serv_sock, &event);
   	if (s == -1) {
       	perror ("epoll_ctl");
-      	abort ();
+		exit (EXIT_FAILURE);
     }
 
   	events = calloc (MAXEVENTS, sizeof (event));
