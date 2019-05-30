@@ -88,7 +88,7 @@ void handle_clnt_write (int clnt_sock, int i) {
             //while (read_len < content_len) {
                 int read_count = read (fd, response, MAX_SEND_LEN);
 
-				write(clnt_sock, response, response_len);
+				write(clnt_sock, response, read_count);
                 read_len += read_count;
 
             //}
