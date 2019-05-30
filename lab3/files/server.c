@@ -84,14 +84,18 @@ void handle_clnt_write (int clnt_sock, int i) {
             size_t response_len = strlen(response);
             write(clnt_sock, response, response_len);
             //读取并发送文件内容
-            int write_len = 0, read_len = 0;
+            //int write_len = 0, read_len = 0;
             //while (read_len < content_len) {
-                int read_count = read (fd, response, MAX_SEND_LEN);
+                //int read_count = read (fd, response, MAX_SEND_LEN);
 
-				write(clnt_sock, response, read_count);
-                read_len += read_count;
+				//write(clnt_sock, response, read_count);
+                //read_len += read_count;
 
             //}
+			int read_count;
+			while((read_count = read (fd, response, MAX_SEND_LEN)) > 0) {
+				write(clnt_sock, response, read_count);
+			}
         }
 		close (fd);
 	}
